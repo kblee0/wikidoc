@@ -16,7 +16,6 @@ class WikidocCrawler:
         self.basedir = ''
         self.image_basedir = ''
         self.css_basedir = ''
-        self.page_list = []
 
         if url is not None:
             self.set_url(url)
@@ -120,11 +119,11 @@ class WikidocCrawler:
         with open(css_filepath, "w", encoding="utf-8") as f:
             f.write(combined_css)
 
-    def _download_image(self, page: BeautifulSoup, page_subdir: str):
+    def _download_image(self, page: BeautifulSoup, page_url: str, page_subdir: str):
         # Image download
         images = page.find_all("img")
         for img in images:
-            img_url = urljoin(url, img.get("src"))  # 상대 URL을 절대 URL로 변환
+            img_url = urljoin(page_url, img.get("src"))  # 상대 URL을 절대 URL로 변환
             img_filename = urllib.parse.unquote(img_url.split("/")[-1])  # 이미지 파일 이름 설정
             try:
                 img_data = requests.get(img_url).content
@@ -155,6 +154,46 @@ class WikidocCrawler:
             elif is_mathjax:
                 self._replace_latex_to_mathml(text_node)
 
+    def gen_topic(self, page_list):
+        # 결과 nav 구조 초기화
+        nav_html = '''<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="ko" xml:lang="ko">
+<head>
+  <title>ePub NAV</title>
+  <meta charset="utf-8"/>
+  <link href="../Styles/sgc-nav.css" rel="stylesheet" type="text/css"/>
+</head>
+<body epub:type="frontmatter">
+  <nav epub:type="toc" id="toc" role="doc-toc">
+    <h1>차례</h1>
+    <ol>
+'''
+        current_li = None
+        for a in page_list:
+            title = html.escape(a['title'])
+            filename = ''.join(ch if ord(ch) >= 256 else urllib.parse.quote(ch, safe="") for ch in a['filename'])
+            # 레벨 1: padding이 0
+            if a['padding'] == 0:
+                if current_li:
+                    nav_html += current_li + '</ol></li>\n'
+                current_li = f'    <li><a href="{filename}">{title}</a>\n      <ol>\n'
+            else:
+                current_li += f'        <li><a href="{filename}">{title}</a></li>\n'
+
+        # 마지막 항목 닫기
+        if current_li:
+            nav_html += current_li + '      </ol>\n    </li>\n'
+
+        nav_html += '''    </ol>
+  </nav>
+</body>
+</html>'''
+        with open(self.get_html_filepath('nav.xhtml', True), "w", encoding="utf-8") as f:
+            f.write(nav_html)
+
+
     def page_download_task(self, url: str, page_subdir: str = '000'):
         print(f'Page Download url: {url}')
         res = requests.get(url)
@@ -173,7 +212,7 @@ class WikidocCrawler:
         page.find(id="page-subject").insert(0, orig_page.find('h1', class_='page-subject'))
         page.find(id="page-content").insert(0, orig_page.find('div', class_='page-content'))
 
-        self._download_image(orig_page, page_subdir)
+        self._download_image(orig_page, url, page_subdir)
         self._convert_tag(page, is_mathjax)
 
         with open(page_filepath, "w", encoding="utf-8") as f:
@@ -181,6 +220,7 @@ class WikidocCrawler:
             f.write(out_html)
 
         print(f"수정된 HTML 파일 저장 완료: {page_filepath}")
+        return page_filename
 
     def book_download_task(self):
         print(f'Book Download url: {self.book_url}')
@@ -193,8 +233,11 @@ class WikidocCrawler:
 
         purl = urlparse(self.book_url)
         pageno = 100
+        page_list = []
         for page in pages:
             pageno = pageno + 1
+
+            title = page.get('title') or page.get_text(strip=True)
             page_href = page.get('href')
 
             match = re.match(r'^javascript:page\((\s*.*?\s*)\).*$', page_href)
@@ -204,7 +247,13 @@ class WikidocCrawler:
             else:
                 page_url = urljoin(purl.geturl(), page_href)
 
-            self.page_download_task(page_url, str(pageno))
+            padding_span = page.select_one('span[style*="padding-left"]')
+            padding = int(padding_span['style'].replace('padding-left:', '').replace('px', '').strip()) if padding_span else 0
+
+            filename = self.page_download_task(page_url, str(pageno))
+
+            page_list.append({'padding': padding, 'title': title, 'filename': filename})
+        self.gen_topic(page_list)
 
 if __name__ == "__main__":
     if len(sys.argv) == 2:
