@@ -120,6 +120,41 @@ class WikidocCrawler:
         with open(css_filepath, "w", encoding="utf-8") as f:
             f.write(combined_css)
 
+    def _download_image(self, page: BeautifulSoup, page_subdir: str):
+        # Image download
+        images = page.find_all("img")
+        for img in images:
+            img_url = urljoin(url, img.get("src"))  # 상대 URL을 절대 URL로 변환
+            img_filename = urllib.parse.unquote(img_url.split("/")[-1])  # 이미지 파일 이름 설정
+            try:
+                img_data = requests.get(img_url).content
+                img_filepath = self.get_image_filepath(page_subdir, img_filename, True)
+                with open(img_filepath, "wb") as f:
+                    f.write(img_data)
+                print(f"다운로드 완료: {img_url} -> {img_filepath}")
+
+                img["src"] = self.get_image_filepath(page_subdir, img_filename)
+            except Exception as e:
+                print(f"이미지 다운로드 실패 {img_url}: {e}")
+
+    def _convert_tag(self, page: BeautifulSoup, is_mathjax: bool):
+        # Tag convert
+        for text_node in page.find_all(string=True):
+            if isinstance(text_node, Doctype): continue
+
+            is_pre_code_tag = False
+            pre_code_tags = {'pre', 'code'}
+            tag = text_node.parent
+            while tag is not None:
+                if tag.name in pre_code_tags:
+                    is_pre_code_tag = True
+                    break
+                tag = tag.parent
+            if is_pre_code_tag:
+                self._replace_custom_markers(text_node)
+            elif is_mathjax:
+                self._replace_latex_to_mathml(text_node)
+
     def page_download_task(self, url: str, page_subdir: str = '000'):
         print(f'Page Download url: {url}')
         res = requests.get(url)
@@ -138,38 +173,8 @@ class WikidocCrawler:
         page.find(id="page-subject").insert(0, orig_page.find('h1', class_='page-subject'))
         page.find(id="page-content").insert(0, orig_page.find('div', class_='page-content'))
 
-        # Image download
-        images = page.find_all("img")
-        for img in images:
-            img_url = urljoin(url, img.get("src"))  # 상대 URL을 절대 URL로 변환
-            img_filename = urllib.parse.unquote(img_url.split("/")[-1])  # 이미지 파일 이름 설정
-            try:
-                img_data = requests.get(img_url).content
-                img_filepath = self.get_image_filepath(page_subdir, img_filename, True)
-                with open(img_filepath, "wb") as f:
-                    f.write(img_data)
-                print(f"다운로드 완료: {img_url} -> {img_filepath}")
-
-                img["src"] = self.get_image_filepath(page_subdir, img_filename)
-            except Exception as e:
-                print(f"이미지 다운로드 실패 {img_url}: {e}")
-
-        # Tag convert
-        for text_node in page.find_all(string=True):
-            if isinstance(text_node, Doctype): continue
-
-            is_pre_code_tag = False
-            pre_code_tags = {'pre', 'code'}
-            tag = text_node.parent
-            while tag is not None:
-                if tag.name in pre_code_tags:
-                    is_pre_code_tag = True
-                    break
-                tag = tag.parent
-            if is_pre_code_tag:
-                self._replace_custom_markers(text_node)
-            elif is_mathjax:
-                self._replace_latex_to_mathml(text_node)
+        self._download_image(orig_page, page_subdir)
+        self._convert_tag(page, is_mathjax)
 
         with open(page_filepath, "w", encoding="utf-8") as f:
             out_html = str(page)
