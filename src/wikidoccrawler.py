@@ -50,10 +50,10 @@ class WikidocCrawler:
 </head>
 <body>
 <div class="page col-sm-12" id="page" style="">
-<div id="page-subject" style="">
-</div>
-<div id='page-content'>
-</div>
+    <div id="page-subject" style="">
+    </div>
+    <div id='page-content'>
+    </div>
 </div>
 </body>
 </html>''',
