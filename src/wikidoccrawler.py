@@ -212,7 +212,7 @@ class WikidocCrawler:
         page.find(id="page-subject").insert(0, orig_page.find('h1', class_='page-subject'))
         page.find(id="page-content").insert(0, orig_page.find('div', class_='page-content'))
 
-        self._download_image(orig_page, url, page_subdir)
+        self._download_image(page, url, page_subdir)
         self._convert_tag(page, is_mathjax)
 
         with open(page_filepath, "w", encoding="utf-8") as f:
@@ -263,6 +263,5 @@ if __name__ == "__main__":
         book = WikidocCrawler(sys.argv[1])
         book.page_download_task(sys.argv[2])
     else:
-        book = WikidocCrawler('https://wikidocs.net/book/2788')
-        book.book_download_task()
-        book.page_download_task('https://wikidocs.net/161302')
+        book = WikidocCrawler('https://wikidocs.net/book/2155')
+        book.page_download_task('https://wikidocs.net/249309')
