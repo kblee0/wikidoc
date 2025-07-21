@@ -128,6 +128,7 @@ class WikidocCrawler:
             try:
                 img_data = requests.get(img_url).content
                 img_filepath = self.get_image_filepath(page_subdir, img_filename, True)
+                os.makedirs(self.get_image_filepath(page_subdir, '', True), exist_ok=True)
                 with open(img_filepath, "wb") as f:
                     f.write(img_data)
                 print(f"다운로드 완료: {img_url} -> {img_filepath}")
@@ -205,7 +206,7 @@ class WikidocCrawler:
         page_filepath = self.get_html_filepath(page_filename, True)
 
         os.makedirs(self.get_html_filepath('', True), exist_ok=True)
-        os.makedirs(self.get_image_filepath(page_subdir, '', True), exist_ok=True)
+        # os.makedirs(self.get_image_filepath(page_subdir, '', True), exist_ok=True)
 
         page = self._get_page_template()
         page.title.string = title
